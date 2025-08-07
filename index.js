@@ -1,5 +1,5 @@
 const express = require("express");
-const bodyParser = require("body-parser");
+// const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const passport = require("passport");
 
@@ -7,9 +7,12 @@ const app = express();
 const port = 8000;
 const cors = require("cors");
 app.use(cors());
+// Increase payload limit to handle large base64 images
+app.use(express.json({ limit: "50mb" })); // You can adjust the size if needed
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+// app.use(bodyParser.urlencoded({ extended: false }));
+// app.use(bodyParser.json());
 app.use(passport.initialize());
 const jwt = require("jsonwebtoken");
 
@@ -37,13 +40,12 @@ const Message = require("./models/message");
 
 //endpoint for registration of the user
 
+// Your routes go below
 app.post("/register", (req, res) => {
   const { name, email, password, image } = req.body;
 
-  // create a new User object
   const newUser = new User({ name, email, password, image });
 
-  // save the user to the database
   newUser
     .save()
     .then(() => {
@@ -171,7 +173,13 @@ app.post("/verify-otp", async (req, res) => {
 
     const token = createToken(user._id);
 
-    res.status(200).json({ message: "OTP verified", token });
+    res.status(200).json({
+      message: "OTP verified",
+      token,
+      name: user.name,
+      email: user.email,
+      image: user.image, // optional, only if your user model includes it
+    });
   } catch (err) {
     console.error("Error verifying OTP:", err);
     res.status(500).json({ message: "Internal Server Error" });
