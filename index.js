@@ -71,37 +71,55 @@ const createToken = (userId) => {
 };
 
 //endpoint for logging in of that particular user
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
-  //check if the email and password are provided
   if (!email || !password) {
-    return res
-      .status(404)
-      .json({ message: "Email and the password are required" });
+    return res.status(400).json({ message: "Email and password are required" });
   }
 
-  //check for that user in the database
-  User.findOne({ email })
-    .then((user) => {
-      if (!user) {
-        //user not found
-        return res.status(404).json({ message: "User not found" });
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Password check
+    if (user.password !== password) {
+      user.loginAttempts = (user.loginAttempts || 0) + 1;
+      user.lastFailedLogin = new Date();
+
+      // If reached 3 failed attempts, send alert email
+      if (user.loginAttempts >= 3) {
+        await transporter.sendMail({
+          from: "benardemma2004@gmail.com",
+          to: user.email,
+          subject: "Suspicious Login Attempt",
+          text: `Dear ${user.name},\n\nWe detected multiple failed login attempts to your account. If this wasn't you, please secure your account immediately.`,
+        });
+
+        // Reset after sending alert so they won't get spammed
+        user.loginAttempts = 0;
       }
 
-      //compare the provided passwords with the password in the database
-      if (user.password !== password) {
-        return res.status(404).json({ message: "Invalid Password!" });
-      }
+      await user.save();
 
-      const token = createToken(user._id);
-      res.status(200).json({ token });
-    })
-    .catch((error) => {
-      console.log("error in finding the user", error);
-      res.status(500).json({ message: "Internal server Error!" });
-    });
+      return res.status(401).json({ message: "Invalid password!" });
+    }
+
+    // ✅ Successful login → reset counter
+    user.loginAttempts = 0;
+    await user.save();
+
+    const token = createToken(user._id);
+    return res.status(200).json({ token });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 });
+
 const nodemailer = require("nodemailer");
 
 const generateOTP = () => Math.floor(1000 + Math.random() * 9000).toString();
