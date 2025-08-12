@@ -69,6 +69,63 @@ const createToken = (userId) => {
 
   return token;
 };
+// Request OTP for password change
+app.post("/request-password-otp", async (req, res) => {
+  const { email } = req.body;
+  const otp = generateOTP();
+  const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+
+  try {
+    const user = await User.findOneAndUpdate(
+      { email },
+      { otp, otpExpires },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    await transporter.sendMail({
+      from: "benardemma2004@gmail.com",
+      to: email,
+      subject: "Password Reset OTP",
+      text: `Your OTP for password reset is ${otp}. It expires in 5 minutes.`,
+    });
+
+    res.status(200).json({ message: "OTP sent successfully" });
+  } catch (err) {
+    console.error("Error sending password OTP:", err);
+    res.status(500).json({ message: "Error sending OTP" });
+  }
+});
+
+// Change password after OTP verification
+app.post("/change-password", async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (user.otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    if (new Date(user.otpExpires) < new Date()) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    user.password = newPassword;
+    user.otp = null;
+    user.otpExpires = null;
+    await user.save();
+
+    res.status(200).json({ message: "Password changed successfully" });
+  } catch (err) {
+    console.error("Error changing password:", err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
 //endpoint for logging in of that particular user
 app.post("/login", async (req, res) => {
